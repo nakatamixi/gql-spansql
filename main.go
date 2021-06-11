@@ -9,37 +9,11 @@ import (
 	"strings"
 
 	"cloud.google.com/go/spanner/spansql"
-	"github.com/graphql-go/graphql/language/ast"
-	"github.com/graphql-go/graphql/language/parser"
+	"github.com/vektah/gqlparser/v2"
+	"github.com/vektah/gqlparser/v2/ast"
 
 	"github.com/iancoleman/strcase"
 )
-
-type defs map[string]interface{}
-
-func (d defs) IsObject(s string) bool {
-	if v, ok := d[s]; ok {
-		_, b := v.(*ast.ObjectDefinition)
-		return b
-	}
-	return false
-}
-
-func (d defs) IsEnum(s string) bool {
-	if v, ok := d[s]; ok {
-		_, b := v.(*ast.EnumDefinition)
-		return b
-	}
-	return false
-}
-
-func (d defs) IsScalar(s string) bool {
-	if v, ok := d[s]; ok {
-		_, b := v.(*ast.ScalarDefinition)
-		return b
-	}
-	return false
-}
 
 var (
 	schama = flag.String("s", "", "path to input schama")
@@ -52,51 +26,42 @@ func main() {
 	if err != nil {
 		log.Fatalf("Read from file failed: %v", err)
 	}
-	astDoc := parse(string(body))
-
-	defs := map[string]interface{}{}
-	for _, node := range astDoc.Definitions {
-		switch n := node.(type) {
-		case *ast.ObjectDefinition:
-			if n.GetName().Value == "Query" || n.GetName().Value == "Mutation" || n.GetName().Value == "Subscription" {
-				continue
-			}
-			defs[n.GetName().Value] = n
-		case *ast.EnumDefinition:
-			defs[n.GetName().Value] = n
-		case *ast.ScalarDefinition:
-			defs[n.GetName().Value] = n
-		}
+	schama, err := loadGQL(body)
+	if err != nil {
+		log.Fatal(err)
 	}
-	for _, node := range defs {
-		switch n := node.(type) {
-		case *ast.ObjectDefinition:
-			c := convertObject(n, defs, *loose)
-			fmt.Println(c.SQL() + ";")
+
+	for name, t := range schama.Types {
+		if t.BuiltIn {
+			continue
 		}
+		if t.Kind != "OBJECT" {
+			continue
+		}
+		if name == "Query" || name == "Mutation" || name == "Subscription" {
+			continue
+		}
+		c := convertObject(t, schama.Types, *loose)
+		fmt.Println(c.SQL() + ";")
 	}
 
 }
 
-func parse(query string) *ast.Document {
-	astDoc, err := parser.Parse(parser.ParseParams{
-		Source: query,
-		Options: parser.ParseOptions{
-			NoLocation: false,
-			NoSource:   true,
-		},
+func loadGQL(b []byte) (*ast.Schema, error) {
+	schama, err := gqlparser.LoadSchema(&ast.Source{
+		Input: string(b),
 	})
 	if err != nil {
-		log.Fatalf("Parse failed: %v", err)
+		return nil, err
 	}
-	return astDoc
+	return schama, nil
 }
 
-func convertObject(obj *ast.ObjectDefinition, d defs, loose bool) spansql.CreateTable {
+func convertObject(obj *ast.Definition, types map[string]*ast.Definition, loose bool) spansql.CreateTable {
 	c := spansql.CreateTable{
-		Name: spansql.ID(obj.GetName().Value),
+		Name: spansql.ID(obj.Name),
 	}
-	pk, found := detectPK(obj.GetName().Value, obj.Fields)
+	pk, found := detectPK(obj.Name, obj.Fields)
 	c.PrimaryKey = pk
 	if !found {
 		c.Columns = append(c.Columns, spansql.ColumnDef{
@@ -110,70 +75,49 @@ func convertObject(obj *ast.ObjectDefinition, d defs, loose bool) spansql.Create
 		})
 	}
 	for _, field := range obj.Fields {
-		c.Columns = append(c.Columns, convertField(field, d, loose))
+		c.Columns = append(c.Columns, convertField(field, types, loose))
 	}
 	return c
 }
 
-func convertField(field *ast.FieldDefinition, d defs, loose bool) spansql.ColumnDef {
+func convertField(f *ast.FieldDefinition, types map[string]*ast.Definition, loose bool) spansql.ColumnDef {
 	isArray := false
-	nonNull := false
 	var typeBase spansql.TypeBase
-	switch f := field.Type.(type) {
-	case *ast.List:
+	switch f.Type.NamedType {
+	case "": // list
 		isArray = true
-		b, err := convertListField(f, d, loose)
+		b, err := convertListField(f.Type.Elem, types, loose)
 		if err != nil {
-			panic(fmt.Errorf("%s: %w", field.Name.Value, err))
+			panic(fmt.Errorf("%s: %w", f.Name, err))
 		}
 		typeBase = b
-	case *ast.NonNull:
-		nonNull = true
-		switch nf := f.Type.(type) {
-		case *ast.List:
-			isArray = true
-			b, err := convertListField(nf, d, loose)
-			if err != nil {
-				panic(fmt.Errorf("%s: %w", field.Name.Value, err))
-			}
-			typeBase = b
-		case *ast.Named:
-			typeBase = convertType(nf.Name.Value, d, loose)
-		}
-	case *ast.Named:
-		typeBase = convertType(f.Name.Value, d, loose)
+	default:
+		typeBase = convertType(f.Type.NamedType, types, loose)
 	}
 	var tlen int64
 	if typeBase == spansql.String {
 		tlen = math.MaxInt64
 	}
 	return spansql.ColumnDef{
-		Name: spansql.ID(field.Name.Value),
+		Name: spansql.ID(f.Name),
 		Type: spansql.Type{
 			Array: isArray,
 			Base:  typeBase,
 			Len:   tlen,
 		},
-		NotNull: nonNull,
+		NotNull: f.Type.NonNull,
 	}
 }
 
-func convertListField(l *ast.List, d defs, loose bool) (spansql.TypeBase, error) {
-	switch t := l.Type.(type) {
-	case *ast.NonNull:
-		if named, ok := t.Type.(*ast.Named); ok {
-			return convertType(named.Name.Value, d, loose), nil
-		}
-	case *ast.Named:
-		if !loose {
-			return 0, fmt.Errorf("spanner is not allowed null element in ARRAY.")
-		}
-		return convertType(t.Name.Value, d, loose), nil
+func convertListField(l *ast.Type, types map[string]*ast.Definition, loose bool) (spansql.TypeBase, error) {
+	if !l.NonNull && !loose {
+		return 0, fmt.Errorf("spanner is not allowed null element in ARRAY.")
 	}
-	return 0, fmt.Errorf("TODO exist not named in list")
+
+	return convertType(l.NamedType, types, loose), nil
 }
 
-func convertType(t string, d defs, loose bool) spansql.TypeBase {
+func convertType(t string, types map[string]*ast.Definition, loose bool) spansql.TypeBase {
 	switch t {
 	case "Int":
 		return spansql.Int64
@@ -190,48 +134,46 @@ func convertType(t string, d defs, loose bool) spansql.TypeBase {
 	case "Date":
 		return spansql.Date
 	default:
-		if d.IsEnum(t) {
-			return spansql.Int64
-		}
-		if d.IsScalar(t) {
-			if scalar, ok := d[t].(*ast.ScalarDefinition); ok {
-				desc := scalar.GetDescription()
-				if desc == nil {
+		if def, ok := types[t]; ok {
+			if def.Kind == "ENUM" {
+				return spansql.Int64
+			}
+			if def.Kind == "SCALAR" {
+				// TODO definie custom spanner type
+				desc := def.Description
+				if desc == "" {
 					return spansql.String
 				}
-				if strings.Contains(desc.Value, "Int") {
+				if strings.Contains(desc, "Int") {
 					return spansql.Int64
 				}
-				if strings.Contains(desc.Value, "ID") || strings.Contains(desc.Value, "String") {
+				if strings.Contains(desc, "ID") || strings.Contains(desc, "String") {
 					return spansql.String
 				}
-				if strings.Contains(desc.Value, "Float") {
+				if strings.Contains(desc, "Float") {
 					return spansql.Float64
 				}
-				if strings.Contains(desc.Value, "Boolean") {
+				if strings.Contains(desc, "Boolean") {
 					return spansql.Bool
 				}
 			}
-			return spansql.String
 
-		}
-		// TODO this case must change column name to xxxID
-		if d.IsObject(t) {
-			if obj, ok := d[t].(*ast.ObjectDefinition); ok {
-				pk, found := detectPK(obj.GetName().Value, obj.Fields)
+			// TODO this case must change column name to xxxID
+			if def.Kind == "OBJECT" {
+				pk, found := detectPK(def.Name, def.Fields)
 				if !found {
 					return spansql.String
 				}
 				if len(pk) > 1 {
 					panic(fmt.Errorf("relation to multiple pk keys is not supported. %s", t))
 				}
-				for _, f := range obj.Fields {
-					if string(pk[0].Column) == f.Name.Value {
-						return convertField(f, d, loose).Type.Base
+				for _, f := range def.Fields {
+					if string(pk[0].Column) == f.Name {
+						return convertField(f, types, loose).Type.Base
 					}
 				}
+				return spansql.String
 			}
-			return spansql.String
 		}
 	}
 	panic(fmt.Sprintf("scalar type %s is not found.", t))
@@ -239,29 +181,29 @@ func convertType(t string, d defs, loose bool) spansql.TypeBase {
 
 }
 
-func detectPK(objName string, fields []*ast.FieldDefinition) ([]spansql.KeyPart, bool) {
+func detectPK(objName string, fields ast.FieldList) ([]spansql.KeyPart, bool) {
 	kp := []spansql.KeyPart{}
 	found := false
 	for _, f := range fields {
-		desc := f.GetDescription()
-		if desc != nil && strings.Contains(desc.Value, "pk") {
+		desc := f.Description
+		if strings.Contains(desc, "SpannerPK") {
 			found = true
 			kp = append(kp, spansql.KeyPart{
-				Column: spansql.ID(f.Name.Value),
+				Column: spansql.ID(f.Name),
 			})
 			continue
 		}
-		if normalize(f.Name.Value) == "Id" {
+		if normalize(f.Name) == "Id" {
 			found = true
 			kp = append(kp, spansql.KeyPart{
-				Column: spansql.ID(f.Name.Value),
+				Column: spansql.ID(f.Name),
 			})
 			break
 		}
-		if normalize(f.Name.Value) == normalize(objName+"ID") {
+		if normalize(f.Name) == normalize(objName+"ID") {
 			found = true
 			kp = append(kp, spansql.KeyPart{
-				Column: spansql.ID(f.Name.Value),
+				Column: spansql.ID(f.Name),
 			})
 			break
 		}
