@@ -21,7 +21,7 @@ func NewConverter(s *ast.Schema, loose bool) *Converter {
 	}
 }
 
-func (c *Converter) SpannerSQL() string {
+func (c *Converter) SpannerSQL() (string, error) {
 	sql := ""
 	for name, t := range c.schema.Types {
 		if t.BuiltIn {
@@ -33,13 +33,16 @@ func (c *Converter) SpannerSQL() string {
 		if name == "Query" || name == "Mutation" || name == "Subscription" {
 			continue
 		}
-		s := c.ConvertDefinition(t)
+		s, err := c.ConvertDefinition(t)
+		if err != nil {
+			return "", err
+		}
 		sql = sql + s.SQL() + ";\n"
 	}
-	return sql
+	return sql, nil
 }
-func (c *Converter) ConvertDefinition(def *ast.Definition) spansql.CreateTable {
-	sc := spansql.CreateTable{
+func (c *Converter) ConvertDefinition(def *ast.Definition) (*spansql.CreateTable, error) {
+	sc := &spansql.CreateTable{
 		Name: spansql.ID(def.Name),
 	}
 	pk, found := DetectPK(def.Name, def.Fields)
@@ -56,11 +59,16 @@ func (c *Converter) ConvertDefinition(def *ast.Definition) spansql.CreateTable {
 		})
 	}
 	for _, field := range def.Fields {
-		sc.Columns = append(sc.Columns, c.ConvertField(field))
+		col, err := c.ConvertField(field)
+		if err != nil {
+			return nil, err
+		}
+
+		sc.Columns = append(sc.Columns, *col)
 	}
-	return sc
+	return sc, nil
 }
-func (c *Converter) ConvertField(f *ast.FieldDefinition) spansql.ColumnDef {
+func (c *Converter) ConvertField(f *ast.FieldDefinition) (*spansql.ColumnDef, error) {
 	isArray := false
 	var typeBase spansql.TypeBase
 	switch f.Type.NamedType {
@@ -68,17 +76,21 @@ func (c *Converter) ConvertField(f *ast.FieldDefinition) spansql.ColumnDef {
 		isArray = true
 		b, err := c.ConvertListField(f.Type.Elem)
 		if err != nil {
-			panic(fmt.Errorf("%s: %w", f.Name, err))
+			return nil, fmt.Errorf("%s: %w", f.Name, err)
 		}
 		typeBase = b
 	default:
-		typeBase = c.ConvertType(f.Type.NamedType)
+		b, err := c.ConvertType(f.Type.NamedType)
+		if err != nil {
+			return nil, err
+		}
+		typeBase = b
 	}
 	var tlen int64
 	if typeBase == spansql.String {
 		tlen = math.MaxInt64
 	}
-	return spansql.ColumnDef{
+	return &spansql.ColumnDef{
 		Name: spansql.ID(f.Name),
 		Type: spansql.Type{
 			Array: isArray,
@@ -86,7 +98,7 @@ func (c *Converter) ConvertField(f *ast.FieldDefinition) spansql.ColumnDef {
 			Len:   tlen,
 		},
 		NotNull: f.Type.NonNull,
-	}
+	}, nil
 }
 
 func (c *Converter) ConvertListField(l *ast.Type) (spansql.TypeBase, error) {
@@ -94,47 +106,47 @@ func (c *Converter) ConvertListField(l *ast.Type) (spansql.TypeBase, error) {
 		return 0, fmt.Errorf("spanner is not allowed null element in ARRAY.")
 	}
 
-	return c.ConvertType(l.NamedType), nil
+	return c.ConvertType(l.NamedType)
 }
 
-func (c *Converter) ConvertType(t string) spansql.TypeBase {
+func (c *Converter) ConvertType(t string) (spansql.TypeBase, error) {
 	switch t {
 	case "Int":
-		return spansql.Int64
+		return spansql.Int64, nil
 	case "ID", "String":
-		return spansql.String
+		return spansql.String, nil
 	case "Float":
-		return spansql.Float64
+		return spansql.Float64, nil
 	case "Boolean":
-		return spansql.Bool
+		return spansql.Bool, nil
 	// TODO this is custom scalar type
 	case "Time", "TimeStamp", "Timestamp":
-		return spansql.Timestamp
+		return spansql.Timestamp, nil
 	// TODO this is custom scalar type
 	case "Date":
-		return spansql.Date
+		return spansql.Date, nil
 	default:
 		if def, ok := c.schema.Types[t]; ok {
 			if def.Kind == "ENUM" {
-				return spansql.Int64
+				return spansql.Int64, nil
 			}
 			if def.Kind == "SCALAR" {
 				// TODO definie custom spanner type
 				desc := def.Description
 				if desc == "" {
-					return spansql.String
+					return spansql.String, nil
 				}
 				if strings.Contains(desc, "Int") {
-					return spansql.Int64
+					return spansql.Int64, nil
 				}
 				if strings.Contains(desc, "ID") || strings.Contains(desc, "String") {
-					return spansql.String
+					return spansql.String, nil
 				}
 				if strings.Contains(desc, "Float") {
-					return spansql.Float64
+					return spansql.Float64, nil
 				}
 				if strings.Contains(desc, "Boolean") {
-					return spansql.Bool
+					return spansql.Bool, nil
 				}
 			}
 
@@ -142,22 +154,24 @@ func (c *Converter) ConvertType(t string) spansql.TypeBase {
 			if def.Kind == "OBJECT" {
 				pk, found := DetectPK(def.Name, def.Fields)
 				if !found {
-					return spansql.String
+					return spansql.String, nil
 				}
-				// TODO err
 				if len(pk) > 1 {
-					panic(fmt.Errorf("relation to multiple pk keys is not supported. %s", t))
+					return 0, fmt.Errorf("relation to multiple pk keys is not supported. %s", t)
 				}
 				for _, f := range def.Fields {
 					if string(pk[0].Column) == f.Name {
-						return c.ConvertField(f).Type.Base
+						col, err := c.ConvertField(f)
+						if err != nil {
+							return 0, err
+						}
+						return col.Type.Base, nil
 					}
 				}
-				return spansql.String
+				return spansql.String, nil
 			}
 		}
 	}
-	panic(fmt.Sprintf("scalar type %s is not found.", t))
-	return 0
+	return 0, fmt.Errorf("scalar type %s is not found.", t)
 
 }

@@ -28,7 +28,11 @@ func main() {
 	}
 
 	c := converter.NewConverter(schama, *loose)
-	fmt.Print(c.SpannerSQL())
+	sql, err := c.SpannerSQL()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Print(sql)
 
 }
 
