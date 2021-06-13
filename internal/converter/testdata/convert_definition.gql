@@ -1,0 +1,35 @@
+type User {
+  userId: ID!
+  state: State!
+  time: Time!
+}
+
+type HasId {
+  id: ID!
+  state: State!
+}
+
+type HasNoId {
+  state: State!
+}
+
+type HasDescription {
+  """
+  SpannerPK
+  """
+  pk: ID!
+  state: State!
+}
+type HasSameColumn {
+  createdAt: Time!
+  updatedAt: Time!
+}
+type HasNoSameColumn {
+  state: State!
+}
+enum State {
+  ENABLED
+  DISABLED
+}
+
+scalar Time

@@ -1,0 +1,15 @@
+type User {
+  userId: ID!
+  nonNullListOfNonNullState: [State!]!
+  nullListOfNonNullState: [State!]
+  nonNullListOfNullState: [State]!
+  nullListOfNullState: [State]
+  time: Time!
+}
+
+enum State {
+  ENABLED
+  DISABLED
+}
+
+scalar Time

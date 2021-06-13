@@ -1,0 +1,28 @@
+type User {
+  userId: ID!
+  state: State!
+  time: Time!
+}
+
+type Item {
+  itemId: ID!
+}
+
+enum State {
+  ENABLED
+  DISABLED
+}
+
+scalar Time
+
+type Query {
+  user(user_id: ID): User
+}
+
+type Mutation {
+  user(user_id: ID!, state: State): User
+}
+
+type Subscription {
+  user(user_id: ID): User
+}

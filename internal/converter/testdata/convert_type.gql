@@ -1,0 +1,30 @@
+type User {
+  id: ID!
+  int: Int
+  float: Float
+  boolean: Boolean
+  enum: Enum
+  scalarDefault: ScalarDefault
+  scalarWithDesc: ScalarWithDesc 
+  objectCantDetectPK: ObjectCantDetectPK 
+  objectCanDetectPK: ObjectCanDetectPK 
+
+}
+type ObjectCantDetectPK {
+  hoge: Int!
+}
+
+type ObjectCanDetectPK {
+  id: Int!
+}
+enum Enum {
+  A
+  B
+}
+
+scalar ScalarDefault
+
+"""
+Int
+"""
+scalar ScalarWithDesc

@@ -1,9 +1,9 @@
 package converter
 
 import (
-	"errors"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 
 	"cloud.google.com/go/spanner/spansql"
@@ -20,11 +20,11 @@ type Converter struct {
 func NewConverter(s *ast.Schema, loose bool, createdName, updatedName string, tableCase, columnCase string) (*Converter, error) {
 	tc := NewCase(tableCase)
 	if tc == UnknownCase {
-		return nil, errors.New("table case not found.")
+		return nil, fmt.Errorf("table case %s not found.", tableCase)
 	}
 	cc := NewCase(columnCase)
 	if cc == UnknownCase {
-		return nil, errors.New("column case not found.")
+		return nil, fmt.Errorf("column case %s not found.", columnCase)
 	}
 	return &Converter{
 		schema:      s,
@@ -38,7 +38,13 @@ func NewConverter(s *ast.Schema, loose bool, createdName, updatedName string, ta
 
 func (c *Converter) SpannerSQL() (string, error) {
 	sql := ""
-	for name, t := range c.schema.Types {
+	keys := make([]string, 0, len(c.schema.Types))
+	for k := range c.schema.Types {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, name := range keys {
+		t := c.schema.Types[name]
 		if t.BuiltIn {
 			continue
 		}
@@ -231,14 +237,14 @@ func (c *Converter) DetectPK(objName string, fields ast.FieldList) ([]spansql.Ke
 			})
 			continue
 		}
-		if NormalizeCase(f.Name) == "Id" {
+		if NormalizeCase(f.Name) == NormalizeCase("Id") {
 			found = true
 			kp = append(kp, spansql.KeyPart{
 				Column: spansql.ID(ConvertCase(f.Name, c.columnCase)),
 			})
 			break
 		}
-		if NormalizeCase(f.Name) == NormalizeCase(objName+"ID") {
+		if NormalizeCase(f.Name) == NormalizeCase(objName+"Id") {
 			found = true
 			kp = append(kp, spansql.KeyPart{
 				Column: spansql.ID(ConvertCase(f.Name, c.columnCase)),
@@ -253,7 +259,7 @@ func (c *Converter) DetectPK(objName string, fields ast.FieldList) ([]spansql.Ke
 			// TODO best effort..
 			fieldCase := DetectCase(fields[0])
 			kp = append(kp, spansql.KeyPart{
-				Column: spansql.ID(ConvertCase(objName+"ID", fieldCase)),
+				Column: spansql.ID(ConvertCase(objName+"Id", fieldCase)),
 			})
 		} else {
 			kp = append(kp, spansql.KeyPart{

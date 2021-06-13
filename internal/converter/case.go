@@ -44,7 +44,7 @@ func DetectCase(def *ast.FieldDefinition) Case {
 }
 
 func NormalizeCase(s string) string {
-	return strcase.ToCamel(s)
+	return strcase.ToSnake(s)
 }
 
 func ConvertCase(s string, c Case) string {
