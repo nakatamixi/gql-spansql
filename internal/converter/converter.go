@@ -1,6 +1,7 @@
 package converter
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -10,15 +11,29 @@ import (
 )
 
 type Converter struct {
-	schema *ast.Schema
-	loose  bool
+	schema                   *ast.Schema
+	loose                    bool
+	createdName, updatedName string
+	tableCase, columnCase    Case
 }
 
-func NewConverter(s *ast.Schema, loose bool) *Converter {
-	return &Converter{
-		schema: s,
-		loose:  loose,
+func NewConverter(s *ast.Schema, loose bool, createdName, updatedName string, tableCase, columnCase string) (*Converter, error) {
+	tc := NewCase(tableCase)
+	if tc == UnknownCase {
+		return nil, errors.New("table case not found.")
 	}
+	cc := NewCase(columnCase)
+	if cc == UnknownCase {
+		return nil, errors.New("column case not found.")
+	}
+	return &Converter{
+		schema:      s,
+		loose:       loose,
+		createdName: createdName,
+		updatedName: updatedName,
+		tableCase:   tc,
+		columnCase:  cc,
+	}, nil
 }
 
 func (c *Converter) SpannerSQL() (string, error) {
@@ -43,9 +58,9 @@ func (c *Converter) SpannerSQL() (string, error) {
 }
 func (c *Converter) ConvertDefinition(def *ast.Definition) (*spansql.CreateTable, error) {
 	sc := &spansql.CreateTable{
-		Name: spansql.ID(def.Name),
+		Name: spansql.ID(ConvertCase(def.Name, c.tableCase)),
 	}
-	pk, found := DetectPK(def.Name, def.Fields)
+	pk, found := c.DetectPK(def.Name, def.Fields)
 	sc.PrimaryKey = pk
 	if !found {
 		sc.Columns = append(sc.Columns, spansql.ColumnDef{
@@ -58,6 +73,8 @@ func (c *Converter) ConvertDefinition(def *ast.Definition) (*spansql.CreateTable
 			NotNull: false,
 		})
 	}
+	existsCreatedAt := false
+	existsUpdatedAt := false
 	for _, field := range def.Fields {
 		col, err := c.ConvertField(field)
 		if err != nil {
@@ -65,6 +82,32 @@ func (c *Converter) ConvertDefinition(def *ast.Definition) (*spansql.CreateTable
 		}
 
 		sc.Columns = append(sc.Columns, *col)
+		if c.createdName != "" && NormalizeCase(c.createdName) == NormalizeCase(field.Name) {
+			existsCreatedAt = true
+		}
+		if c.updatedName != "" && NormalizeCase(c.updatedName) == NormalizeCase(field.Name) {
+			existsUpdatedAt = true
+		}
+	}
+	if !existsCreatedAt && c.createdName != "" {
+		sc.Columns = append(sc.Columns, spansql.ColumnDef{
+			Name: spansql.ID(c.createdName),
+			Type: spansql.Type{
+				Array: false,
+				Base:  spansql.Timestamp,
+			},
+			NotNull: true,
+		})
+	}
+	if !existsUpdatedAt && c.updatedName != "" {
+		sc.Columns = append(sc.Columns, spansql.ColumnDef{
+			Name: spansql.ID(c.updatedName),
+			Type: spansql.Type{
+				Array: false,
+				Base:  spansql.Timestamp,
+			},
+			NotNull: true,
+		})
 	}
 	return sc, nil
 }
@@ -91,7 +134,7 @@ func (c *Converter) ConvertField(f *ast.FieldDefinition) (*spansql.ColumnDef, er
 		tlen = math.MaxInt64
 	}
 	return &spansql.ColumnDef{
-		Name: spansql.ID(f.Name),
+		Name: spansql.ID(ConvertCase(f.Name, c.columnCase)),
 		Type: spansql.Type{
 			Array: isArray,
 			Base:  typeBase,
@@ -152,7 +195,7 @@ func (c *Converter) ConvertType(t string) (spansql.TypeBase, error) {
 
 			// TODO this case must change column name to xxxID
 			if def.Kind == "OBJECT" {
-				pk, found := DetectPK(def.Name, def.Fields)
+				pk, found := c.DetectPK(def.Name, def.Fields)
 				if !found {
 					return spansql.String, nil
 				}
@@ -174,4 +217,49 @@ func (c *Converter) ConvertType(t string) (spansql.TypeBase, error) {
 	}
 	return 0, fmt.Errorf("scalar type %s is not found.", t)
 
+}
+
+func (c *Converter) DetectPK(objName string, fields ast.FieldList) ([]spansql.KeyPart, bool) {
+	kp := []spansql.KeyPart{}
+	found := false
+	for _, f := range fields {
+		desc := f.Description
+		if strings.Contains(desc, "SpannerPK") {
+			found = true
+			kp = append(kp, spansql.KeyPart{
+				Column: spansql.ID(ConvertCase(f.Name, c.columnCase)),
+			})
+			continue
+		}
+		if NormalizeCase(f.Name) == "Id" {
+			found = true
+			kp = append(kp, spansql.KeyPart{
+				Column: spansql.ID(ConvertCase(f.Name, c.columnCase)),
+			})
+			break
+		}
+		if NormalizeCase(f.Name) == NormalizeCase(objName+"ID") {
+			found = true
+			kp = append(kp, spansql.KeyPart{
+				Column: spansql.ID(ConvertCase(f.Name, c.columnCase)),
+			})
+			break
+		}
+
+	}
+
+	if !found {
+		if c.columnCase == NoConvertCase {
+			// TODO best effort..
+			fieldCase := DetectCase(fields[0])
+			kp = append(kp, spansql.KeyPart{
+				Column: spansql.ID(ConvertCase(objName+"ID", fieldCase)),
+			})
+		} else {
+			kp = append(kp, spansql.KeyPart{
+				Column: spansql.ID(ConvertCase(objName+"_id", c.columnCase)),
+			})
+		}
+	}
+	return kp, found
 }

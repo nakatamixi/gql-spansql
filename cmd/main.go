@@ -12,8 +12,12 @@ import (
 )
 
 var (
-	schama = flag.String("s", "", "path to input schama")
-	loose  = flag.Bool("loose", false, "loose type check.")
+	schama      = flag.String("s", "", "path to input schama")
+	loose       = flag.Bool("loose", false, "loose type check.")
+	createdName = flag.String("created-column-name", "", "if not empty, add this column as created_at Timestamp column.")
+	updatedName = flag.String("updated-column-name", "", "if not empty, add this column as updated_at Timestamp column.")
+	tableCase   = flag.String("table-case", "", "snake or lowercamel or uppercamel. if empty no convert.")
+	columnCase  = flag.String("column-case", "", "snake or lowercamel or uppercamel. if empty no convert.")
 )
 
 func main() {
@@ -27,7 +31,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	c := converter.NewConverter(schama, *loose)
+	c, err := converter.NewConverter(schama, *loose, *createdName, *updatedName, *tableCase, *columnCase)
+	if err != nil {
+		log.Fatal(err)
+	}
 	sql, err := c.SpannerSQL()
 	if err != nil {
 		log.Fatal(err)
