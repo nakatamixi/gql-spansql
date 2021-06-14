@@ -6,7 +6,7 @@
 
 # Install
 ```
-go install github.com/nakatamixi/gql-spansql
+go install github.com/nakatamixi/gql-spansql/cmd/gql-spansql
 ```
 
 # Usage
