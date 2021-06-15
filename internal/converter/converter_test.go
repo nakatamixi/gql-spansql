@@ -252,6 +252,11 @@ func TestConverter_ConvertFieldName(t *testing.T) {
 			require.Equal(t, "userIds", name)
 		})
 	})
+	t.Run("field has description", func(t *testing.T) {
+		name, err := c.ConvertFieldName(s.Types["User"].Fields.ForName("bItem"))
+		require.NoError(t, err)
+		require.Equal(t, "bItem", name)
+	})
 }
 
 //go:embed testdata/convert_type.gql

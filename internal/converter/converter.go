@@ -21,7 +21,8 @@ type Converter struct {
 }
 
 var (
-	spanTypeRe = regexp.MustCompile(`^SpannerType: ?(.*)$`)
+	spanTypeRe   = regexp.MustCompile(`^SpannerType: ?(.*)$`)
+	spanColumnRe = regexp.MustCompile(`^SpannerColumn: ?(.*)$`)
 )
 
 func NewConverter(s *ast.Schema, loose bool, createdName, updatedName string, tableCase, columnCase string) (*Converter, error) {
@@ -162,6 +163,11 @@ func (c *Converter) ConvertField(f *ast.FieldDefinition) (*spansql.ColumnDef, er
 }
 
 func (c *Converter) ConvertFieldName(f *ast.FieldDefinition) (string, error) {
+	desc := f.Description
+	match := spanColumnRe.FindStringSubmatch(desc)
+	if match != nil && len(match) > 1 {
+		return match[1], nil
+	}
 	namedType := f.Type.NamedType
 	isArray := false
 	if f.Type.NamedType == "" {

@@ -2,6 +2,9 @@ type User {
   userId: ID!
   userIds: [ID!]!
   aItem: Item!
+  """
+  SpannerColumn: bItem
+  """
   bItem: Item!
   aItems: [Item!]!
   bItems: [Item!]!
