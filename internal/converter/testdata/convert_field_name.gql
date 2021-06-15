@@ -1,8 +1,10 @@
 type User {
   userId: ID!
   userIds: [ID!]!
-  item: Item!
-  items: [Item!]!
+  aItem: Item!
+  bItem: Item!
+  aItems: [Item!]!
+  bItems: [Item!]!
 }
 
 type Item {

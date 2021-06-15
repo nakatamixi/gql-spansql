@@ -230,9 +230,9 @@ func TestConverter_ConvertFieldName(t *testing.T) {
 	require.NoError(t, err)
 	t.Run("field does not array", func(t *testing.T) {
 		t.Run("field is object", func(t *testing.T) {
-			name, err := c.ConvertFieldName(s.Types["User"].Fields.ForName("item"))
+			name, err := c.ConvertFieldName(s.Types["User"].Fields.ForName("aItem"))
 			require.NoError(t, err)
-			require.Equal(t, "itemId", name)
+			require.Equal(t, "aItemId", name)
 		})
 		t.Run("field does not object", func(t *testing.T) {
 			name, err := c.ConvertFieldName(s.Types["User"].Fields.ForName("userId"))
@@ -242,9 +242,9 @@ func TestConverter_ConvertFieldName(t *testing.T) {
 	})
 	t.Run("field is array", func(t *testing.T) {
 		t.Run("field element is object", func(t *testing.T) {
-			name, err := c.ConvertFieldName(s.Types["User"].Fields.ForName("items"))
+			name, err := c.ConvertFieldName(s.Types["User"].Fields.ForName("aItems"))
 			require.NoError(t, err)
-			require.Equal(t, "itemIds", name)
+			require.Equal(t, "aItemIds", name)
 		})
 		t.Run("field element does not object", func(t *testing.T) {
 			name, err := c.ConvertFieldName(s.Types["User"].Fields.ForName("userIds"))

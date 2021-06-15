@@ -9,6 +9,8 @@ import (
 
 	"cloud.google.com/go/spanner/spansql"
 	"github.com/vektah/gqlparser/v2/ast"
+
+	"github.com/jinzhu/inflection"
 )
 
 type Converter struct {
@@ -173,19 +175,15 @@ func (c *Converter) ConvertFieldName(f *ast.FieldDefinition) (string, error) {
 				// TODO best effort..
 				fieldCase = DetectCase(f)
 			}
-			return ConvertCase(namedType+"Id"+addPluralSuffix(isArray), fieldCase), nil
+			if isArray {
+				return ConvertCase(inflection.Plural(inflection.Singular(f.Name)+"Id"), fieldCase), nil
+			}
+			return ConvertCase(f.Name+"Id", fieldCase), nil
 		} else {
 			return ConvertCase(f.Name, c.columnCase), nil
 		}
 	}
 	return ConvertCase(f.Name, c.columnCase), nil
-}
-
-func addPluralSuffix(b bool) string {
-	if b {
-		return "s"
-	}
-	return ""
 }
 
 func (c *Converter) ConvertListField(l *ast.Type) (spansql.TypeBase, error) {
