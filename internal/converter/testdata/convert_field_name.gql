@@ -1,0 +1,10 @@
+type User {
+  userId: ID!
+  userIds: [ID!]!
+  item: Item!
+  items: [Item!]!
+}
+
+type Item {
+  id: ID!
+}

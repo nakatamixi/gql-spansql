@@ -144,8 +144,12 @@ func (c *Converter) ConvertField(f *ast.FieldDefinition) (*spansql.ColumnDef, er
 	if typeBase == spansql.String {
 		tlen = math.MaxInt64
 	}
+	name, err := c.ConvertFieldName(f)
+	if err != nil {
+		return nil, err
+	}
 	return &spansql.ColumnDef{
-		Name: spansql.ID(ConvertCase(f.Name, c.columnCase)),
+		Name: spansql.ID(name),
 		Type: spansql.Type{
 			Array: isArray,
 			Base:  typeBase,
@@ -153,6 +157,35 @@ func (c *Converter) ConvertField(f *ast.FieldDefinition) (*spansql.ColumnDef, er
 		},
 		NotNull: f.Type.NonNull,
 	}, nil
+}
+
+func (c *Converter) ConvertFieldName(f *ast.FieldDefinition) (string, error) {
+	namedType := f.Type.NamedType
+	isArray := false
+	if f.Type.NamedType == "" {
+		isArray = true
+		namedType = f.Type.Elem.NamedType
+	}
+	if def, ok := c.schema.Types[namedType]; ok {
+		if def.Kind == "OBJECT" {
+			fieldCase := c.columnCase
+			if c.columnCase == NoConvertCase {
+				// TODO best effort..
+				fieldCase = DetectCase(f)
+			}
+			return ConvertCase(namedType+"Id"+addPluralSuffix(isArray), fieldCase), nil
+		} else {
+			return ConvertCase(f.Name, c.columnCase), nil
+		}
+	}
+	return ConvertCase(f.Name, c.columnCase), nil
+}
+
+func addPluralSuffix(b bool) string {
+	if b {
+		return "s"
+	}
+	return ""
 }
 
 func (c *Converter) ConvertListField(l *ast.Type) (spansql.TypeBase, error) {
@@ -204,7 +237,6 @@ func (c *Converter) ConvertType(t string) (spansql.TypeBase, error) {
 				}
 			}
 
-			// TODO this case must change column name to xxxID
 			if def.Kind == "OBJECT" {
 				pk, found := c.DetectPK(def.Name, def.Fields)
 				if !found {
@@ -260,17 +292,14 @@ func (c *Converter) DetectPK(objName string, fields ast.FieldList) ([]spansql.Ke
 	}
 
 	if !found {
+		fieldCase := c.columnCase
 		if c.columnCase == NoConvertCase {
 			// TODO best effort..
-			fieldCase := DetectCase(fields[0])
-			kp = append(kp, spansql.KeyPart{
-				Column: spansql.ID(ConvertCase(objName+"Id", fieldCase)),
-			})
-		} else {
-			kp = append(kp, spansql.KeyPart{
-				Column: spansql.ID(ConvertCase(objName+"_id", c.columnCase)),
-			})
+			fieldCase = DetectCase(fields[0])
 		}
+		kp = append(kp, spansql.KeyPart{
+			Column: spansql.ID(ConvertCase(objName+"Id", fieldCase)),
+		})
 	}
 	return kp, found
 }

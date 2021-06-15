@@ -220,6 +220,40 @@ func TestConverter_ConvertField(t *testing.T) {
 	})
 }
 
+//go:embed testdata/convert_field_name.gql
+var convertFieldNameBody []byte
+
+func TestConverter_ConvertFieldName(t *testing.T) {
+	s, err := loadGQL(convertFieldNameBody)
+	require.NoError(t, err)
+	c, err := converter.NewConverter(s, true, "", "", "", "")
+	require.NoError(t, err)
+	t.Run("field does not array", func(t *testing.T) {
+		t.Run("field is object", func(t *testing.T) {
+			name, err := c.ConvertFieldName(s.Types["User"].Fields.ForName("item"))
+			require.NoError(t, err)
+			require.Equal(t, "itemId", name)
+		})
+		t.Run("field does not object", func(t *testing.T) {
+			name, err := c.ConvertFieldName(s.Types["User"].Fields.ForName("userId"))
+			require.NoError(t, err)
+			require.Equal(t, "userId", name)
+		})
+	})
+	t.Run("field is array", func(t *testing.T) {
+		t.Run("field element is object", func(t *testing.T) {
+			name, err := c.ConvertFieldName(s.Types["User"].Fields.ForName("items"))
+			require.NoError(t, err)
+			require.Equal(t, "itemIds", name)
+		})
+		t.Run("field element does not object", func(t *testing.T) {
+			name, err := c.ConvertFieldName(s.Types["User"].Fields.ForName("userIds"))
+			require.NoError(t, err)
+			require.Equal(t, "userIds", name)
+		})
+	})
+}
+
 //go:embed testdata/convert_type.gql
 var convertTypeBody []byte
 
