@@ -25,6 +25,6 @@ enum Enum {
 scalar ScalarDefault
 
 """
-Int
+SpannerType: Int
 """
 scalar ScalarWithDesc

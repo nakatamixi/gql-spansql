@@ -3,6 +3,7 @@ package converter
 import (
 	"fmt"
 	"math"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -16,6 +17,10 @@ type Converter struct {
 	createdName, updatedName string
 	tableCase, columnCase    Case
 }
+
+var (
+	spanTypeRe = regexp.MustCompile(`^SpannerType: ?(.*)$`)
+)
 
 func NewConverter(s *ast.Schema, loose bool, createdName, updatedName string, tableCase, columnCase string) (*Converter, error) {
 	tc := NewCase(tableCase)
@@ -180,21 +185,21 @@ func (c *Converter) ConvertType(t string) (spansql.TypeBase, error) {
 				return spansql.Int64, nil
 			}
 			if def.Kind == "SCALAR" {
-				// TODO definie custom spanner type
 				desc := def.Description
-				if desc == "" {
+				match := spanTypeRe.FindStringSubmatch(desc)
+				if match == nil || len(match) <= 1 {
 					return spansql.String, nil
 				}
-				if strings.Contains(desc, "Int") {
+				if strings.Contains(match[1], "Int") {
 					return spansql.Int64, nil
 				}
-				if strings.Contains(desc, "ID") || strings.Contains(desc, "String") {
+				if strings.Contains(match[1], "ID") || strings.Contains(match[1], "String") {
 					return spansql.String, nil
 				}
-				if strings.Contains(desc, "Float") {
+				if strings.Contains(match[1], "Float") {
 					return spansql.Float64, nil
 				}
-				if strings.Contains(desc, "Boolean") {
+				if strings.Contains(match[1], "Boolean") {
 					return spansql.Bool, nil
 				}
 			}
