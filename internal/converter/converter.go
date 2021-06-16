@@ -219,7 +219,7 @@ func (c *Converter) ConvertType(t string) (spansql.TypeBase, error) {
 	default:
 		if def, ok := c.schema.Types[t]; ok {
 			if def.Kind == "ENUM" {
-				return spansql.Int64, nil
+				return spansql.String, nil
 			}
 			if def.Kind == "SCALAR" {
 				desc := def.Description

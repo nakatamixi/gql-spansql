@@ -51,7 +51,7 @@ func TestConverter_SpannerSQL(t *testing.T) {
 ) PRIMARY KEY(itemId);
 CREATE TABLE User (
   userId STRING(MAX) NOT NULL,
-  state INT64 NOT NULL,
+  state STRING(MAX) NOT NULL,
   time TIMESTAMP NOT NULL,
 ) PRIMARY KEY(userId);
 `, sql)
@@ -128,7 +128,7 @@ func TestConverter_ConvertDefinition(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, `CREATE TABLE HasNoSameColumn (
   hasNoSameColumnId STRING(MAX),
-  state INT64 NOT NULL,
+  state STRING(MAX) NOT NULL,
   createdAt TIMESTAMP NOT NULL,
 ) PRIMARY KEY(hasNoSameColumnId)`, createTable.SQL())
 		})
@@ -152,7 +152,7 @@ func TestConverter_ConvertDefinition(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, `CREATE TABLE HasNoSameColumn (
   hasNoSameColumnId STRING(MAX),
-  state INT64 NOT NULL,
+  state STRING(MAX) NOT NULL,
   updatedAt TIMESTAMP NOT NULL,
 ) PRIMARY KEY(hasNoSameColumnId)`, createTable.SQL())
 		})
@@ -172,14 +172,14 @@ func TestConverter_ConvertField(t *testing.T) {
 				require.NoError(t, err)
 				column, err := c.ConvertField(s.Types["User"].Fields.ForName("nonNullListOfNonNullState"))
 				require.NoError(t, err)
-				require.Equal(t, "nonNullListOfNonNullState ARRAY<INT64> NOT NULL", column.SQL())
+				require.Equal(t, "nonNullListOfNonNullState ARRAY<STRING(MAX)> NOT NULL", column.SQL())
 			})
 			t.Run("null element, loose case", func(t *testing.T) {
 				c, err := converter.NewConverter(s, true, "", "", "", "")
 				require.NoError(t, err)
 				column, err := c.ConvertField(s.Types["User"].Fields.ForName("nonNullListOfNullState"))
 				require.NoError(t, err)
-				require.Equal(t, "nonNullListOfNullState ARRAY<INT64> NOT NULL", column.SQL())
+				require.Equal(t, "nonNullListOfNullState ARRAY<STRING(MAX)> NOT NULL", column.SQL())
 			})
 			t.Run("null element, not loose case", func(t *testing.T) {
 				c, err := converter.NewConverter(s, false, "", "", "", "")
@@ -194,14 +194,14 @@ func TestConverter_ConvertField(t *testing.T) {
 				require.NoError(t, err)
 				column, err := c.ConvertField(s.Types["User"].Fields.ForName("nullListOfNonNullState"))
 				require.NoError(t, err)
-				require.Equal(t, "nullListOfNonNullState ARRAY<INT64>", column.SQL())
+				require.Equal(t, "nullListOfNonNullState ARRAY<STRING(MAX)>", column.SQL())
 			})
 			t.Run("null element, loose case", func(t *testing.T) {
 				c, err := converter.NewConverter(s, true, "", "", "", "")
 				require.NoError(t, err)
 				column, err := c.ConvertField(s.Types["User"].Fields.ForName("nullListOfNullState"))
 				require.NoError(t, err)
-				require.Equal(t, "nullListOfNullState ARRAY<INT64>", column.SQL())
+				require.Equal(t, "nullListOfNullState ARRAY<STRING(MAX)>", column.SQL())
 			})
 			t.Run("null element, not loose case", func(t *testing.T) {
 				c, err := converter.NewConverter(s, false, "", "", "", "")
@@ -298,7 +298,7 @@ func TestConverter_ConvertType(t *testing.T) {
 		require.NoError(t, err)
 		typeBase, err := c.ConvertType(s.Types["User"].Fields.ForName("enum").Type.NamedType)
 		require.NoError(t, err)
-		require.Equal(t, spansql.Int64, typeBase)
+		require.Equal(t, spansql.String, typeBase)
 	})
 	t.Run("scalar default", func(t *testing.T) {
 		c, err := converter.NewConverter(s, true, "", "", "", "")
