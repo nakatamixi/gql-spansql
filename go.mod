@@ -1,4 +1,4 @@
-module github.com/nakatamixi/gql-spansql
+module github.com/nktks/gql-spansql
 
 go 1.16
 

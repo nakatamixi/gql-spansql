@@ -3,7 +3,7 @@ package converter_test
 import (
 	"testing"
 
-	"github.com/nakatamixi/gql-spansql/internal/converter"
+	"github.com/nktks/gql-spansql/internal/converter"
 	"github.com/stretchr/testify/require"
 )
 

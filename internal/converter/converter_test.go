@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"cloud.google.com/go/spanner/spansql"
-	"github.com/nakatamixi/gql-spansql/internal/converter"
+	"github.com/nktks/gql-spansql/internal/converter"
 	"github.com/stretchr/testify/require"
 	"github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"

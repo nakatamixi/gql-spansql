@@ -6,7 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 
-	"github.com/nakatamixi/gql-spansql/internal/converter"
+	"github.com/nktks/gql-spansql/internal/converter"
 	"github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
 )

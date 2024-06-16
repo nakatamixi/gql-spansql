@@ -1,12 +1,12 @@
 # gql-spansql
 
-[license]: https://github.com/nakatamixi/gql-spansql/blob/master/LICENSE
+[license]: https://github.com/nktks/gql-spansql/blob/master/LICENSE
 
 `gql-spansql` is a command-line tool to convert GraphQL SDL to Google Cloud Spanner table schemas.
 
 # Install
 ```
-go install github.com/nakatamixi/gql-spansql/cmd/gql-spansql
+go install github.com/nktks/gql-spansql/cmd/gql-spansql
 ```
 
 # Usage
